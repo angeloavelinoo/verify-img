@@ -1,23 +1,20 @@
-from PIL import Image, ImageStat
+from PIL import Image
 import zipfile
 import os
 
-# Caminho da imagem
-image_path = 'images3.jpg'
+image_path = 'images2.png'
 
-# Função para dividir a imagem em n partes (n x n)
-def split_image_into_frames(img, n):
-    # Converter imagem para RGB se estiver em modo de paleta
+def split_image_into_frames(img, num_frames_x, num_frames_y):
     if img.mode != 'RGB':
         img = img.convert('RGB')
     
     img_width, img_height = img.size
-    frame_width = img_width // n
-    frame_height = img_height // n
+    frame_width = img_width // num_frames_x
+    frame_height = img_height // num_frames_y
 
     frames = []
-    for i in range(n):
-        for j in range(n):
+    for i in range(num_frames_y):
+        for j in range(num_frames_x):
             left = j * frame_width
             upper = i * frame_height
             right = left + frame_width
@@ -26,29 +23,28 @@ def split_image_into_frames(img, n):
             frames.append(frame)
     return frames
 
-# Função para verificar as posições vazias ou ocupadas
-def verificar_ocupacao(frames, tolerancia=0.05, margem=200):
-    posicoes_ocupadas = []
+def verificar_posicoes_vazias(frames, tolerancia=0.90, margem=200):
+    posicoes_vazias = []
     for i, frame in enumerate(frames):
-        stat = ImageStat.Stat(frame)
-        media = stat.mean
-        variancia = stat.var
+        pixels = frame.getdata()
+        total_pixels = len(pixels)
+        white_pixels = sum(
+            1 for pixel in pixels
+            if (isinstance(pixel, int) and pixel >= margem) or
+               (isinstance(pixel, tuple) and all(channel >= margem for channel in pixel[:3]))
+        )
+        if white_pixels / total_pixels >= tolerancia:
+            posicoes_vazias.append(i)
+    return posicoes_vazias
 
-        # Critério para verificar ocupação com base em média e variância
-        if any(v < margem for v in media) or any(v > tolerancia for v in variancia):
-            posicoes_ocupadas.append(i)
-    return posicoes_ocupadas
-
-# Configuração para dividir a imagem em n x n partes
-n = 4  # Exemplo: para uma divisão de 4x4, altere esse valor conforme necessário
+num_frames_x = 3
+num_frames_y = 3
 img = Image.open(image_path)
 
-# Dividir a imagem e verificar ocupação
-frames = split_image_into_frames(img, n)
-posicoes_ocupadas = verificar_ocupacao(frames)
-print("Posições ocupadas:", posicoes_ocupadas)
+frames = split_image_into_frames(img, num_frames_x, num_frames_y)
+posicoes_vazias = verificar_posicoes_vazias(frames)
+print("Posições vazias:", posicoes_vazias)
 
-# Função para salvar os frames divididos
 def save_frames(frames, output_folder='frames'):
     os.makedirs(output_folder, exist_ok=True)
     for idx, frame in enumerate(frames):
@@ -57,7 +53,6 @@ def save_frames(frames, output_folder='frames'):
 
 save_frames(frames)
 
-# Compactar os frames em um ZIP
 def compress_frames(output_folder='frames', zip_name='frames.zip'):
     with zipfile.ZipFile(zip_name, 'w') as zf:
         for file in os.listdir(output_folder):
