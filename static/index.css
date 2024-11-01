@@ -1,0 +1,25 @@
+.container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    height: 60vh;
+}
+
+h2{
+    font-size: 30px;
+}
+
+button{
+    padding: 10px;
+    border-radius: 5px;
+    background-color:rgb(72, 145, 148);
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 19px;
+}
+
+button:hover{
+    background-color:rgb(17, 112, 116);
+    transition: 0.3s;
+}
