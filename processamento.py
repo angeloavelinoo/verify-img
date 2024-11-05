@@ -1,11 +1,13 @@
-from PIL import Image, ImageStat
-import zipfile
-import os
+from PIL import Image
+import numpy as np
+from tensorflow.keras.models import load_model
+import io
+
+model = load_model("motor_detection_model.keras")
 
 def split_image_into_frames(img, n):
     if img.mode != 'RGB':
         img = img.convert('RGB')
-    
     img_width, img_height = img.size
     frame_width = img_width // n
     frame_height = img_height // n
@@ -20,41 +22,31 @@ def split_image_into_frames(img, n):
             frames.append(frame)
     return frames
 
-def verificar_ocupacao(frames, diferenca_tolerada=30, variancia_tolerada=1000):
-    posicoes_ocupadas = []
-    referencia_vazia = ImageStat.Stat(frames[2]).mean
-    variancia_vazia = sum(ImageStat.Stat(frames[2]).var) / 3
+def verificar_motor(frame):
+    frame = frame.resize((128, 128))
+    img_array = np.array(frame) / 255.0 
+    img_array = np.expand_dims(img_array, axis=0)
+    prediction = model.predict(img_array)
+    return prediction[0][0] < 0.5
 
-    for i, frame in enumerate(frames):
-        stat = ImageStat.Stat(frame)
-        media = stat.mean
-        variancia = sum(stat.var) / 3
-        diferenca = sum(abs(media[j] - referencia_vazia[j]) for j in range(3)) / 3
-
-        if diferenca > diferenca_tolerada or variancia > variancia_vazia + variancia_tolerada:
-            posicoes_ocupadas.append(i)
-    return posicoes_ocupadas
-
-def exportar_resultado(posicoes_ocupadas, total_frames, output_file):
-    with open(output_file, 'w') as f:
-        for i in range(total_frames):
-            status = "Ocupado" if i in posicoes_ocupadas else "Vazio"
-            f.write(f"Posição {i}: {status}\n")
-
-def process_image(image_path, zip_path):
+def process_image(image_path, zip_obj):
     img = Image.open(image_path)
     frames = split_image_into_frames(img, 4)
-    posicoes_ocupadas = verificar_ocupacao(frames)
+    posicoes_motor = []
 
-    output_folder = os.path.dirname(zip_path)
-    os.makedirs(output_folder, exist_ok=True)
+    for idx, frame in enumerate(frames):
+        if verificar_motor(frame):
+            posicoes_motor.append(idx)
+        print(f"Frame {idx}: {'Motor' if idx in posicoes_motor else 'Vazio'}")
 
-    txt_path = os.path.join(output_folder, "resultado.txt")
-    exportar_resultado(posicoes_ocupadas, len(frames), txt_path)
+    resultado_txt = "\n".join([f"Posição {i}: {'Motor' if i in posicoes_motor else 'Vazio'}" for i in range(len(frames))])
+    print("Resultado gerado:", resultado_txt) 
 
-    with zipfile.ZipFile(zip_path, 'w') as zf:
-        for idx, frame in enumerate(frames):
-            frame_path = os.path.join(output_folder, f'frame_{idx}.png')
-            frame.save(frame_path)
-            zf.write(frame_path, arcname=f'frame_{idx}.png')
-        zf.write(txt_path, arcname="resultado.txt")
+    zip_obj.writestr("resultado.txt", resultado_txt)
+
+    for idx, frame in enumerate(frames):
+        with io.BytesIO() as frame_buffer:
+            frame.save(frame_buffer, format="PNG")
+            frame_buffer.seek(0)
+            zip_obj.writestr(f"frame_{idx}.png", frame_buffer.read())
+        print(f"Frame {idx} salvo no ZIP")
