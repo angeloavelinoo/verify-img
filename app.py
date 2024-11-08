@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, send_file
 import os
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from processamento import process_image
 import io
 import zipfile
 
 app = Flask(__name__)
+CORS(app)
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -27,15 +29,9 @@ def upload_image():
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        process_image(file_path, zf)  
+    processed_image = process_image(file_path)
+    return send_file(processed_image, mimetype='image/png', as_attachment=True, download_name='imagem_processada.png')
 
-    with open("frames_e_resultado_debug.zip", "wb") as f:
-        f.write(zip_buffer.getvalue())
-
-    zip_buffer.seek(0)
-    return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name='frames_e_resultado.zip')
 
 if __name__ == '__main__':
     app.run(debug=True)
